@@ -4,7 +4,7 @@ import websockets
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from detector import run_all_detectors, get_latest_signals
+from detector import run_all_detectors, get_latest_signals, build_risk_stats
 
 DERIV_WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
 
@@ -43,73 +43,50 @@ def fetch_data(symbol, granularity, count):
 
 
 def render_signal_card(row, direction_color):
-    gap_info = ""
-    try:
-        if row["pattern"] == "Bullish FVG" and pd.notna(row["gap_bottom"]):
-            gap_info = f"""
-            <p style="margin:5px 0; color:#aaa">
-                📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> → <b style="color:white">{row['gap_top']}</b>
-                &nbsp;|&nbsp; Midpoint: <b style="color:white">{row['gap_midpoint']}</b>
-            </p>
-            """
-    except Exception:
-        gap_info = ""
+    pattern = row["pattern"]
+    direction = row["direction"]
+    time = row["time"]
+    win_prob = row["win_probability"]
+    rr = row["rr_ratio"]
+    entry = row["entry"]
+    tp = row["suggested_tp"]
+    sl = row["suggested_sl"]
 
-    st.markdown(f"""
-    <div style="
-        background-color: #1e1e2e;
-        border-left: 5px solid {direction_color};
-        padding: 15px;
-        margin-bottom: 10px;
-        border-radius: 5px;
-    ">
-        <h4 style="color:{direction_color}; margin:0">
-            {row['direction']} — {row['pattern']}
-        </h4>
-        <p style="color:#aaa; margin:5px 0">
-            🕒 Signal confirmed: {row['time']} &nbsp;|&nbsp;
-            🎯 Win Probability: <b style="color:white">{row['win_probability']}</b> &nbsp;|&nbsp;
-            ⚖️ R:R: <b style="color:white">{row['rr_ratio']}</b>
-        </p>
-        <p style="margin:5px 0">
-            🟡 Entry (candle 4 open): <b style="color:#f0c040">{row['entry']}</b>
-        </p>
-        <p style="margin:5px 0">
-            ✅ TP: <b style="color:#00cc96">{row['suggested_tp']}</b> &nbsp;|&nbsp;
-            ❌ SL: <b style="color:#ef553b">{row['suggested_sl']}</b>
-        </p>
-        {gap_info}
-        <small style="color:#555">⚠️ Refresh tool to check for newer signals</small>
+    fvg_line = ""
+    if pattern == "Bullish FVG":
+        try:
+            gb = row["gap_bottom"]
+            gt = row["gap_top"]
+            gm = row["gap_midpoint"]
+            if pd.notna(gb):
+                fvg_line = f'<div style="margin:5px 0; color:#aaa">📦 FVG Zone: <b style="color:white">{gb}</b> to <b style="color:white">{gt}</b> | Midpoint: <b style="color:white">{gm}</b></div>'
+        except Exception:
+            fvg_line = ""
+
+    html = f"""
+    <div style="background-color:#1e1e2e; border-left:5px solid {direction_color}; padding:15px; margin-bottom:10px; border-radius:5px;">
+        <h4 style="color:{direction_color}; margin:0">{direction} — {pattern}</h4>
+        <div style="color:#aaa; margin:5px 0">🕒 {time} &nbsp;|&nbsp; 🎯 Win Probability: <b style="color:white">{win_prob}</b> &nbsp;|&nbsp; ⚖️ R:R: <b style="color:white">{rr}</b></div>
+        <div style="margin:5px 0">🟡 Entry (candle 4 open): <b style="color:#f0c040">{entry}</b></div>
+        <div style="margin:5px 0">✅ TP: <b style="color:#00cc96">{tp}</b> &nbsp;|&nbsp; ❌ SL: <b style="color:#ef553b">{sl}</b></div>
+        {fvg_line}
+        <div style="color:#555; margin-top:8px; font-size:0.8em">⚠️ Refresh tool to check for newer signals</div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_confluence_card(row):
-    st.markdown(f"""
-    <div style="
-        background-color: #1e1e2e;
-        border-left: 6px solid {row['color']};
-        padding: 15px;
-        margin-bottom: 12px;
-        border-radius: 6px;
-    ">
-        <h4 style="color:{row['color']}; margin:0">
-            {row['strength']} — Confluence Score: {row['score']}
-        </h4>
-        <p style="color:#aaa; margin:5px 0">🕒 {row['time']}</p>
-        <p style="margin:5px 0; color:#ccc">
-            📊 Factors: <b style="color:white">{row['reasons']}</b>
-        </p>
-        <p style="margin:5px 0">
-            🎯 Entry: <b style="color:#f0c040">{row['entry']}</b> &nbsp;|&nbsp;
-            ✅ TP: <b style="color:#00cc96">{row['suggested_tp']}</b> &nbsp;|&nbsp;
-            ❌ SL: <b style="color:#ef553b">{row['suggested_sl']}</b>
-        </p>
-        <p style="margin:5px 0">
-            📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> → <b style="color:white">{row['gap_top']}</b>
-        </p>
+    html = f"""
+    <div style="background-color:#1e1e2e; border-left:6px solid {row['color']}; padding:15px; margin-bottom:12px; border-radius:6px;">
+        <h4 style="color:{row['color']}; margin:0">{row['strength']} — Confluence Score: {row['score']}</h4>
+        <div style="color:#aaa; margin:5px 0">🕒 {row['time']}</div>
+        <div style="margin:5px 0; color:#ccc">📊 Factors: <b style="color:white">{row['reasons']}</b></div>
+        <div style="margin:5px 0">🎯 Entry: <b style="color:#f0c040">{row['entry']}</b> &nbsp;|&nbsp; ✅ TP: <b style="color:#00cc96">{row['suggested_tp']}</b> &nbsp;|&nbsp; ❌ SL: <b style="color:#ef553b">{row['suggested_sl']}</b></div>
+        <div style="margin:5px 0">📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> to <b style="color:white">{row['gap_top']}</b></div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 # --- UI ---
@@ -173,7 +150,9 @@ if run_button:
 
         with st.spinner("Running full analysis..."):
             results = run_all_detectors(df)
-            signals = get_latest_signals(df, lookback=signal_lookback)
+            risk_stats = build_risk_stats(results["outcomes"])
+            signals = get_latest_signals(
+                df, lookback=signal_lookback, risk_stats=risk_stats)
             confluence = results.get("confluence", pd.DataFrame())
 
         # --- MAIN TABS ---
@@ -194,7 +173,6 @@ if run_button:
             if signals.empty:
                 st.info("No signals detected.")
             else:
-                # Sort options
                 sort_by = st.selectbox(
                     "Sort signals by",
                     ["Most Recent", "Win Probability",
@@ -226,7 +204,6 @@ if run_button:
                     direction_color = "#00cc96" if row["direction"] == "BUY" else "#ef553b"
                     render_signal_card(row, direction_color)
 
-                # Signal summary table below cards
                 st.markdown("---")
                 st.caption("All signals this session")
                 display_cols = ["time", "pattern", "direction", "entry",
@@ -244,10 +221,10 @@ if run_button:
             else:
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("Total Setups", len(confluence))
-                col_b.metric("High Confluence (7+)",
-                             len(confluence[confluence["score"] >= 7]))
+                col_b.metric("High Confluence (6+)",
+                             len(confluence[confluence["score"] >= 6]))
                 col_c.metric(
-                    "Strong (5-6)", len(confluence[confluence["score"].between(5, 6)]))
+                    "Strong (4-5)", len(confluence[confluence["score"].between(4, 5)]))
 
                 st.markdown("---")
 
@@ -259,9 +236,9 @@ if run_button:
 
                 filtered = confluence.copy()
                 if filter_strength == "🔥 HIGH only":
-                    filtered = filtered[filtered["score"] >= 7]
+                    filtered = filtered[filtered["score"] >= 6]
                 elif filter_strength == "⚡ STRONG+":
-                    filtered = filtered[filtered["score"] >= 5]
+                    filtered = filtered[filtered["score"] >= 4]
                 elif filter_strength == "👀 MODERATE+":
                     filtered = filtered[filtered["score"] >= 3]
 
