@@ -44,13 +44,16 @@ def fetch_data(symbol, granularity, count):
 
 def render_signal_card(row, direction_color):
     gap_info = ""
-    if row.get("pattern") == "Bullish FVG" and row.get("gap_bottom") is not None:
-        gap_info = f"""
-        <p style="margin:5px 0; color:#aaa">
-            📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> → <b style="color:white">{row['gap_top']}</b>
-            &nbsp;|&nbsp; Midpoint: <b style="color:white">{row['gap_midpoint']}</b>
-        </p>
-        """
+    try:
+        if row["pattern"] == "Bullish FVG" and pd.notna(row["gap_bottom"]):
+            gap_info = f"""
+            <p style="margin:5px 0; color:#aaa">
+                📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> → <b style="color:white">{row['gap_top']}</b>
+                &nbsp;|&nbsp; Midpoint: <b style="color:white">{row['gap_midpoint']}</b>
+            </p>
+            """
+    except Exception:
+        gap_info = ""
 
     st.markdown(f"""
     <div style="
