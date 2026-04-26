@@ -139,7 +139,6 @@ def analyze_post_pattern_outcome(df, pattern_df, forward_candles=10, index_col="
         try:
             peak_idx = future["high"].idxmax()
             trough_idx = future["low"].idxmin()
-
             mae_bullish = entry_close - future["low"].iloc[:peak_idx + 1].min()
             mae_bearish = future["high"].iloc[:trough_idx +
                                               1].max() - entry_close
@@ -185,10 +184,49 @@ def outcome_summary(outcome_df):
     return summary
 
 
-def get_latest_signals(df, forward_candles=10, lookback=50):
-    signals = []
+def build_risk_stats(outcomes_df):
+    if outcomes_df.empty:
+        return None
 
+    stats = {}
+    grouped = outcomes_df.groupby("pattern")
+
+    for pattern, group in grouped:
+        bullish = group[group["outcome"] == "Bullish"]
+        total = len(group)
+        bull_count = len(bullish)
+
+        avg_up = group["up_move"].mean()
+        avg_down = group["down_move"].mean()
+        avg_mae = group["mae"].mean()
+        rr = round(avg_up / avg_down, 2) if avg_down > 0 else 0
+        prob = f"{round(bull_count / total * 100, 2)}%" if total > 0 else "N/A"
+
+        stats[pattern] = {
+            "tp": round(avg_up, 5),
+            "sl": round(avg_down, 5),
+            "mae": round(avg_mae, 5),
+            "prob": prob,
+            "rr": str(rr)
+        }
+
+    return stats
+
+
+def get_latest_signals(df, forward_candles=10, lookback=50, risk_stats=None):
+    signals = []
     recent_df = df.tail(lookback).reset_index(drop=True)
+
+    default_stats = {
+        "Bullish FVG":   {"tp": 229.98, "sl": 151.78, "prob": "75.36%", "rr": "1.52"},
+        "CHoCH Bullish": {"tp": 206.45, "sl": 174.10, "prob": "62.9%",  "rr": "1.19"},
+        "BOS Bullish":   {"tp": 196.68, "sl": 190.84, "prob": "64.86%", "rr": "1.03"},
+    }
+
+    def get_stats(pattern):
+        if risk_stats is not None and pattern in risk_stats:
+            return risk_stats[pattern]
+        return default_stats.get(pattern, {"tp": 200, "sl": 150, "prob": "N/A", "rr": "N/A"})
 
     # Bullish FVG signals
     for i in range(1, len(recent_df) - 1):
@@ -197,6 +235,7 @@ def get_latest_signals(df, forward_candles=10, lookback=50):
                 recent_df["high"].iloc[i - 1]
             entry = round(
                 (recent_df["low"].iloc[i + 1] + recent_df["high"].iloc[i - 1]) / 2, 5)
+            s = get_stats("Bullish FVG")
             signals.append({
                 "time": recent_df["time"].iloc[i],
                 "pattern": "Bullish FVG",
@@ -205,10 +244,10 @@ def get_latest_signals(df, forward_candles=10, lookback=50):
                 "gap_top": round(recent_df["low"].iloc[i + 1], 5),
                 "gap_bottom": round(recent_df["high"].iloc[i - 1], 5),
                 "gap_size": round(gap_size, 5),
-                "suggested_tp": round(recent_df["close"].iloc[i] + 229.98, 5),
-                "suggested_sl": round(recent_df["close"].iloc[i] - 151.78, 5),
-                "win_probability": "75.36%",
-                "rr_ratio": "1.52"
+                "suggested_tp": round(entry + s["tp"], 5),
+                "suggested_sl": round(entry - s["sl"], 5),
+                "win_probability": s["prob"],
+                "rr_ratio": s["rr"]
             })
 
     # CHoCH Bullish signals
@@ -218,18 +257,20 @@ def get_latest_signals(df, forward_candles=10, lookback=50):
         curr_close = recent_df["close"].iloc[i]
 
         if curr_close > prev_high and prev_prev_high > prev_high:
+            entry = round(curr_close, 5)
+            s = get_stats("CHoCH Bullish")
             signals.append({
                 "time": recent_df["time"].iloc[i],
                 "pattern": "CHoCH Bullish",
                 "direction": "BUY",
-                "entry": round(curr_close, 5),
+                "entry": entry,
                 "gap_top": None,
                 "gap_bottom": None,
                 "gap_size": None,
-                "suggested_tp": round(curr_close + 206.45, 5),
-                "suggested_sl": round(curr_close - 174.10, 5),
-                "win_probability": "62.9%",
-                "rr_ratio": "1.19"
+                "suggested_tp": round(entry + s["tp"], 5),
+                "suggested_sl": round(entry - s["sl"], 5),
+                "win_probability": s["prob"],
+                "rr_ratio": s["rr"]
             })
 
     # BOS Bullish signals
@@ -239,25 +280,38 @@ def get_latest_signals(df, forward_candles=10, lookback=50):
         curr_close = recent_df["close"].iloc[i]
 
         if curr_close > prev_high and prev_prev_high <= prev_high:
+            entry = round(curr_close, 5)
+            s = get_stats("BOS Bullish")
             signals.append({
                 "time": recent_df["time"].iloc[i],
                 "pattern": "BOS Bullish",
                 "direction": "BUY",
-                "entry": round(curr_close, 5),
+                "entry": entry,
                 "gap_top": None,
                 "gap_bottom": None,
                 "gap_size": None,
-                "suggested_tp": round(curr_close + 196.68, 5),
-                "suggested_sl": round(curr_close - 190.84, 5),
-                "win_probability": "64.86%",
-                "rr_ratio": "1.03"
+                "suggested_tp": round(entry + s["tp"], 5),
+                "suggested_sl": round(entry - s["sl"], 5),
+                "win_probability": s["prob"],
+                "rr_ratio": s["rr"]
             })
 
     if signals:
         sig_df = pd.DataFrame(signals)
         sig_df = sig_df.sort_values(
             "time", ascending=False).reset_index(drop=True)
-        return sig_df
+
+        # Safety filter — remove bad signals
+        sig_df = sig_df[
+            ~((sig_df["direction"] == "BUY") & (
+                sig_df["suggested_sl"] >= sig_df["entry"]))
+        ]
+        sig_df = sig_df[
+            ~((sig_df["direction"] == "BUY") & (
+                sig_df["suggested_tp"] <= sig_df["entry"]))
+        ]
+
+        return sig_df.reset_index(drop=True)
 
     return pd.DataFrame()
 
@@ -279,30 +333,26 @@ def calculate_confluence(df, results, price_tolerance=0.002):
         anchor_price = fvg_row["gap_bottom"]
         anchor_idx = fvg_row["index"]
 
-        # Base score for FVG
         score += 3
         reasons.append("Bullish FVG (+3)")
 
-        # Check for CHoCH Bullish within 10 candles
         if not bos.empty:
             choch = bos[
                 (bos["pattern"] == "CHoCH Bullish") &
-                (abs(bos["index"] - anchor_idx) <= 10)
+                (abs(bos["index"] - anchor_idx) <= 20)
             ]
             if not choch.empty:
                 score += 3
                 reasons.append("CHoCH Bullish (+3)")
 
-            # Check for BOS Bullish within 10 candles
             bos_bull = bos[
                 (bos["pattern"] == "BOS Bullish") &
-                (abs(bos["index"] - anchor_idx) <= 10)
+                (abs(bos["index"] - anchor_idx) <= 20)
             ]
             if not bos_bull.empty:
                 score += 2
                 reasons.append("BOS Bullish (+2)")
 
-        # Check for Equal Lows near anchor price
         if not eq.empty:
             eq_lows = eq[
                 (eq["pattern"] == "Equal Lows") &
@@ -313,7 +363,6 @@ def calculate_confluence(df, results, price_tolerance=0.002):
                 score += 2
                 reasons.append("Equal Lows nearby (+2)")
 
-        # Check for consolidation just before
         if not con.empty:
             con_before = con[
                 (con["index_end"] >= anchor_idx - 15) &
@@ -323,11 +372,10 @@ def calculate_confluence(df, results, price_tolerance=0.002):
                 score += 1
                 reasons.append("Prior Consolidation (+1)")
 
-        # Determine signal strength
-        if score >= 7:
+        if score >= 6:
             strength = "🔥 HIGH"
             color = "#00cc96"
-        elif score >= 5:
+        elif score >= 4:
             strength = "⚡ STRONG"
             color = "#f0c040"
         elif score >= 3:
