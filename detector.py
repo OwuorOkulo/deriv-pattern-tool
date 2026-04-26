@@ -229,27 +229,47 @@ def get_latest_signals(df, forward_candles=10, lookback=50, risk_stats=None):
         return default_stats.get(pattern, {"tp": 200, "sl": 150, "prob": "N/A", "rr": "N/A"})
 
     # Bullish FVG signals
-    for i in range(1, len(recent_df) - 1):
+    # Bullish FVG signals
+    for i in range(1, len(recent_df) - 2):
         if recent_df["low"].iloc[i + 1] > recent_df["high"].iloc[i - 1]:
-            gap_size = recent_df["low"].iloc[i + 1] - \
-                recent_df["high"].iloc[i - 1]
-            entry = round(
-                (recent_df["low"].iloc[i + 1] + recent_df["high"].iloc[i - 1]) / 2, 5)
-            s = get_stats("Bullish FVG")
-            signals.append({
-                "time": recent_df["time"].iloc[i],
-                "pattern": "Bullish FVG",
-                "direction": "BUY",
-                "entry": entry,
-                "gap_top": round(recent_df["low"].iloc[i + 1], 5),
-                "gap_bottom": round(recent_df["high"].iloc[i - 1], 5),
-                "gap_size": round(gap_size, 5),
-                "suggested_tp": round(entry + s["tp"], 5),
-                "suggested_sl": round(entry - s["sl"], 5),
-                "win_probability": s["prob"],
-                "rr_ratio": s["rr"]
-            })
+            gap_top = round(recent_df["low"].iloc[i + 1], 5)
+            gap_bottom = round(recent_df["high"].iloc[i - 1], 5)
+            gap_size = round(gap_top - gap_bottom, 5)
+            gap_midpoint = round((gap_top + gap_bottom) / 2, 5)
 
+            # Entry at open of candle 4 (i+2)
+            entry = round(recent_df["open"].iloc[i + 2], 5)
+
+            s = get_stats("Bullish FVG")
+
+            # SL below gap bottom with MAE buffer
+            mae_buffer = s.get("mae", 0)
+            sl = round(gap_bottom - mae_buffer, 5)
+
+            # TP based on average up move from entry
+            tp = round(entry + s["tp"], 5)
+
+            # R:R recalculated from actual entry
+            risk = round(entry - sl, 5)
+            reward = round(tp - entry, 5)
+            rr = round(reward / risk, 2) if risk > 0 else 0
+
+            # Only add if SL is below entry and TP is above entry
+            if sl < entry < tp:
+                signals.append({
+                    "time": recent_df["time"].iloc[i + 2],
+                    "pattern": "Bullish FVG",
+                    "direction": "BUY",
+                    "entry": entry,
+                    "gap_top": gap_top,
+                    "gap_bottom": gap_bottom,
+                    "gap_size": gap_size,
+                    "gap_midpoint": gap_midpoint,
+                    "suggested_tp": tp,
+                    "suggested_sl": sl,
+                    "win_probability": s["prob"],
+                    "rr_ratio": str(rr)
+                })
     # CHoCH Bullish signals
     for i in range(2, len(recent_df) - 1):
         prev_high = recent_df["high"].iloc[i - 1]

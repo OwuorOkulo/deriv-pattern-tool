@@ -43,6 +43,15 @@ def fetch_data(symbol, granularity, count):
 
 
 def render_signal_card(row, direction_color):
+    gap_info = ""
+    if row.get("pattern") == "Bullish FVG" and row.get("gap_bottom") is not None:
+        gap_info = f"""
+        <p style="margin:5px 0; color:#aaa">
+            📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> → <b style="color:white">{row['gap_top']}</b>
+            &nbsp;|&nbsp; Midpoint: <b style="color:white">{row['gap_midpoint']}</b>
+        </p>
+        """
+
     st.markdown(f"""
     <div style="
         background-color: #1e1e2e;
@@ -55,14 +64,20 @@ def render_signal_card(row, direction_color):
             {row['direction']} — {row['pattern']}
         </h4>
         <p style="color:#aaa; margin:5px 0">
-            🕒 {row['time']} &nbsp;|&nbsp;
+            🕒 Signal confirmed: {row['time']} &nbsp;|&nbsp;
             🎯 Win Probability: <b style="color:white">{row['win_probability']}</b> &nbsp;|&nbsp;
             ⚖️ R:R: <b style="color:white">{row['rr_ratio']}</b>
         </p>
         <p style="margin:5px 0">
-            🎯 Entry: <b style="color:#f0c040">{row['entry']}</b> &nbsp;|&nbsp;
+            🟡 Entry (candle 4 open): <b style="color:#f0c040">{row['entry']}</b>
+        </p>
+        <p style="margin:5px 0">
             ✅ TP: <b style="color:#00cc96">{row['suggested_tp']}</b> &nbsp;|&nbsp;
             ❌ SL: <b style="color:#ef553b">{row['suggested_sl']}</b>
+        </p>
+        {gap_info}
+        <p style="color:#555; margin:5px 0; font-size:0.8em">
+            ⚠️ Refresh tool to check for newer signals
         </p>
     </div>
     """, unsafe_allow_html=True)
