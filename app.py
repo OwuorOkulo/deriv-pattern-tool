@@ -79,9 +79,7 @@ def render_signal_card(row, direction_color):
             ❌ SL: <b style="color:#ef553b">{row['suggested_sl']}</b>
         </p>
         {gap_info}
-        <p style="color:#555; margin:5px 0; font-size:0.8em">
-            ⚠️ Refresh tool to check for newer signals
-        </p>
+        <small style="color:#555">⚠️ Refresh tool to check for newer signals</small>
     </div>
     """, unsafe_allow_html=True)
 
