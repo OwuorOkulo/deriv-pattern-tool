@@ -156,7 +156,7 @@ if run_button:
             confluence = results.get("confluence", pd.DataFrame())
 
         # --- MAIN TABS ---
-       tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "🚨 Signals",
             "🎯 Confluence",
             "📊 Pattern Stats",
@@ -427,11 +427,11 @@ if run_button:
             st.caption(f"{len(df)} candles — {symbol} {timeframe}")
             st.dataframe(df, use_container_width=True)
 
-
         # ── TAB 6: FVG DEEP ANALYSIS ──
         with tab6:
             st.subheader("Bullish FVG — Deep Behaviour Analysis")
-            st.caption("Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
+            st.caption(
+                "Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
 
             fvg_summary = results.get("fvg_summary", {})
             fvg_behaviour = results.get("fvg_behaviour", pd.DataFrame())
@@ -443,7 +443,8 @@ if run_button:
                 st.markdown("### Overview")
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Bullish FVGs", fvg_summary["total_fvgs"])
-                m2.metric("Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
+                m2.metric(
+                    "Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
                 m3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
                 m4.metric("Max Drawdown", fvg_summary["max_drawdown"])
 
@@ -451,7 +452,8 @@ if run_button:
 
                 # --- FAILURE ANALYSIS ---
                 st.markdown("### Failure Analysis")
-                st.caption("A failure = price came into the FVG, traded below gap bottom and hit SL")
+                st.caption(
+                    "A failure = price came into the FVG, traded below gap bottom and hit SL")
 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -478,12 +480,14 @@ if run_button:
 
                 # --- DRAWDOWN ANALYSIS ---
                 st.markdown("### Drawdown Analysis")
-                st.caption("How far did price drop from entry before recovering — on ALL FVGs")
+                st.caption(
+                    "How far did price drop from entry before recovering — on ALL FVGs")
 
                 col3, col4, col5 = st.columns(3)
                 col3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
                 col4.metric("Max Drawdown Ever", fvg_summary["max_drawdown"])
-                col5.metric("FVGs with above avg drawdown", fvg_summary["drawdown_over_avg"])
+                col5.metric("FVGs with above avg drawdown",
+                            fvg_summary["drawdown_over_avg"])
 
                 if not fvg_behaviour.empty:
                     fig_dd = px.histogram(
@@ -497,18 +501,21 @@ if run_button:
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)"
                     )
-                    st.plotly_chart(fig_dd, use_container_width=True, key="fig_dd")
+                    st.plotly_chart(
+                        fig_dd, use_container_width=True, key="fig_dd")
 
                 st.markdown("---")
 
                 # --- TP RANGE ANALYSIS ---
                 st.markdown("### TP Range Analysis")
-                st.caption("How far did price move up after FVG formed and for how many candles")
+                st.caption(
+                    "How far did price move up after FVG formed and for how many candles")
 
                 col6, col7, col8 = st.columns(3)
                 col6.metric("Avg Up Move", fvg_summary["avg_up_move"])
                 col7.metric("Max Up Move Ever", fvg_summary["max_up_move"])
-                col8.metric("Avg Candles Up Before Retrace", fvg_summary["avg_candles_up"])
+                col8.metric("Avg Candles Up Before Retrace",
+                            fvg_summary["avg_candles_up"])
 
                 # TP Bucket chart
                 buckets = fvg_summary["tp_buckets"]
@@ -550,5 +557,3 @@ if run_button:
                 # --- RAW FVG TABLE ---
                 with st.expander("View all FVG instances"):
                     st.dataframe(fvg_behaviour, use_container_width=True)
-
-
