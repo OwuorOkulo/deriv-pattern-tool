@@ -462,6 +462,8 @@ def run_all_detectors(df, forward_candles=10):
         "equal_highs_lows": eq,
         "consolidation": con
     })
+    fvg_behaviour = analyze_fvg_behaviour(df)
+    fvg_summary = summarize_fvg_behaviour(fvg_behaviour)
 
     return {
         "equal_highs_lows": eq,
@@ -470,5 +472,139 @@ def run_all_detectors(df, forward_candles=10):
         "consolidation": con,
         "outcomes": all_outcomes,
         "summary": summary,
-        "confluence": confluence
+        "confluence": confluence,
+        "fvg_behaviour": fvg_behaviour,
+        "fvg_summary": fvg_summary,
+    }
+
+
+def analyze_fvg_behaviour(df, forward_candles=30):
+    fvg_list = []
+
+    for i in range(1, len(df) - forward_candles - 2):
+        # Detect Bullish FVG
+        if df["low"].iloc[i + 1] > df["high"].iloc[i - 1]:
+            gap_top = df["low"].iloc[i + 1]
+            gap_bottom = df["high"].iloc[i - 1]
+            gap_mid = (gap_top + gap_bottom) / 2
+
+            # Entry at candle 4 open
+            entry_idx = i + 2
+            entry_price = df["open"].iloc[entry_idx]
+
+            future = df.iloc[entry_idx + 1: entry_idx +
+                             forward_candles + 1].reset_index(drop=True)
+
+            if future.empty:
+                continue
+
+            # --- FAILURE ANALYSIS ---
+            # Failure = price came down into FVG and traded below gap_bottom
+            failure = False
+            failure_candle = None
+            for j in range(len(future)):
+                if future["low"].iloc[j] < gap_bottom:
+                    failure = True
+                    failure_candle = j + 1
+                    break
+
+            # --- DRAWDOWN ANALYSIS ---
+            # How far did price drop from entry before recovering
+            # Look at lowest point before the highest point
+            peak_idx = future["high"].idxmax()
+            pre_peak = future.iloc[:peak_idx + 1]
+            drawdown = entry_price - pre_peak["low"].min()
+            drawdown = round(max(drawdown, 0), 5)
+
+            # --- TP RANGE ANALYSIS ---
+            # How many candles did price go up before retracing back below entry
+            tp_candles = 0
+            max_up = 0
+            for j in range(len(future)):
+                if future["close"].iloc[j] > entry_price:
+                    tp_candles = j + 1
+                    max_up = max(max_up, future["high"].iloc[j] - entry_price)
+                else:
+                    break
+
+            # Max up move overall
+            max_up_move = round(future["high"].max() - entry_price, 5)
+
+            # Candles before price retraces below entry
+            candles_up = 0
+            for j in range(len(future)):
+                if future["low"].iloc[j] >= entry_price:
+                    candles_up = j + 1
+                else:
+                    break
+
+            fvg_list.append({
+                "time": df["time"].iloc[i],
+                "entry": round(entry_price, 5),
+                "gap_top": round(gap_top, 5),
+                "gap_bottom": round(gap_bottom, 5),
+                "gap_size": round(gap_top - gap_bottom, 5),
+                "failure": failure,
+                "failure_candle": failure_candle,
+                "drawdown": drawdown,
+                "max_up_move": max_up_move,
+                "candles_up_before_retrace": candles_up,
+            })
+
+    if not fvg_list:
+        return pd.DataFrame()
+
+    result_df = pd.DataFrame(fvg_list)
+
+    return result_df
+
+
+def summarize_fvg_behaviour(fvg_df):
+    if fvg_df.empty:
+        return {}
+
+    total = len(fvg_df)
+    failures = fvg_df[fvg_df["failure"] == True]
+    successes = fvg_df[fvg_df["failure"] == False]
+
+    # Failure stats
+    failure_count = len(failures)
+    failure_rate = round(failure_count / total * 100, 2)
+    avg_failure_candle = round(
+        failures["failure_candle"].mean(), 2) if not failures.empty else 0
+
+    # Drawdown stats — on successful trades
+    avg_drawdown = round(fvg_df["drawdown"].mean(), 5)
+    max_drawdown = round(fvg_df["drawdown"].max(), 5)
+    drawdown_over_50 = len(
+        fvg_df[fvg_df["drawdown"] > fvg_df["drawdown"].mean()])
+
+    # TP range stats
+    avg_up_move = round(fvg_df["max_up_move"].mean(), 5)
+    max_up_move = round(fvg_df["max_up_move"].max(), 5)
+    avg_candles_up = round(fvg_df["candles_up_before_retrace"].mean(), 2)
+    max_candles_up = int(fvg_df["candles_up_before_retrace"].max())
+
+    # Best TP buckets — how many times did price go up by various ranges
+    buckets = {
+        "Moved 0-100 pts": len(fvg_df[fvg_df["max_up_move"] <= 100]),
+        "Moved 100-200 pts": len(fvg_df[(fvg_df["max_up_move"] > 100) & (fvg_df["max_up_move"] <= 200)]),
+        "Moved 200-300 pts": len(fvg_df[(fvg_df["max_up_move"] > 200) & (fvg_df["max_up_move"] <= 300)]),
+        "Moved 300-500 pts": len(fvg_df[(fvg_df["max_up_move"] > 300) & (fvg_df["max_up_move"] <= 500)]),
+        "Moved 500+ pts": len(fvg_df[fvg_df["max_up_move"] > 500]),
+    }
+
+    return {
+        "total_fvgs": total,
+        "failure_count": failure_count,
+        "failure_rate": failure_rate,
+        "avg_failure_candle": avg_failure_candle,
+        "avg_drawdown": avg_drawdown,
+        "max_drawdown": max_drawdown,
+        "drawdown_over_avg": drawdown_over_50,
+        "avg_up_move": avg_up_move,
+        "max_up_move": max_up_move,
+        "avg_candles_up": avg_candles_up,
+        "max_candles_up": max_candles_up,
+        "tp_buckets": buckets,
     }

@@ -156,11 +156,12 @@ if run_button:
             confluence = results.get("confluence", pd.DataFrame())
 
         # --- MAIN TABS ---
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+       tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "🚨 Signals",
             "🎯 Confluence",
             "📊 Pattern Stats",
             "⚖️ Risk Management",
+            "🔬 FVG Deep Analysis",
             "🔍 Raw Data"
         ])
 
@@ -421,7 +422,133 @@ if run_button:
                 st.plotly_chart(fig4, use_container_width=True, key="fig4")
 
         # ── TAB 5: RAW DATA ──
-        with tab5:
+        with tab6:
             st.subheader("Raw Candle Data")
             st.caption(f"{len(df)} candles — {symbol} {timeframe}")
             st.dataframe(df, use_container_width=True)
+
+
+        # ── TAB 6: FVG DEEP ANALYSIS ──
+        with tab6:
+            st.subheader("Bullish FVG — Deep Behaviour Analysis")
+            st.caption("Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
+
+            fvg_summary = results.get("fvg_summary", {})
+            fvg_behaviour = results.get("fvg_behaviour", pd.DataFrame())
+
+            if not fvg_summary:
+                st.info("No FVG behaviour data available.")
+            else:
+                # --- TOP METRICS ---
+                st.markdown("### Overview")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Bullish FVGs", fvg_summary["total_fvgs"])
+                m2.metric("Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
+                m3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
+                m4.metric("Max Drawdown", fvg_summary["max_drawdown"])
+
+                st.markdown("---")
+
+                # --- FAILURE ANALYSIS ---
+                st.markdown("### Failure Analysis")
+                st.caption("A failure = price came into the FVG, traded below gap bottom and hit SL")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"""
+                    <div style="background-color:#1e1e2e; padding:15px; border-radius:8px; border-left:5px solid #ef553b">
+                        <h4 style="color:#ef553b">FVG Failure Rate</h4>
+                        <h2 style="color:white">{fvg_summary['failure_rate']}%</h2>
+                        <p style="color:#aaa">{fvg_summary['failure_count']} failures out of {fvg_summary['total_fvgs']} total FVGs</p>
+                        <p style="color:#aaa">Average failure occurred on candle <b style="color:white">{fvg_summary['avg_failure_candle']}</b> after entry</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col2:
+                    st.markdown(f"""
+                    <div style="background-color:#1e1e2e; padding:15px; border-radius:8px; border-left:5px solid #00cc96">
+                        <h4 style="color:#00cc96">FVG Success Rate</h4>
+                        <h2 style="color:white">{round(100 - fvg_summary['failure_rate'], 2)}%</h2>
+                        <p style="color:#aaa">{fvg_summary['total_fvgs'] - fvg_summary['failure_count']} successful FVGs</p>
+                        <p style="color:#aaa">Price held above gap bottom and moved up</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                # --- DRAWDOWN ANALYSIS ---
+                st.markdown("### Drawdown Analysis")
+                st.caption("How far did price drop from entry before recovering — on ALL FVGs")
+
+                col3, col4, col5 = st.columns(3)
+                col3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
+                col4.metric("Max Drawdown Ever", fvg_summary["max_drawdown"])
+                col5.metric("FVGs with above avg drawdown", fvg_summary["drawdown_over_avg"])
+
+                if not fvg_behaviour.empty:
+                    fig_dd = px.histogram(
+                        fvg_behaviour,
+                        x="drawdown",
+                        nbins=30,
+                        title="Drawdown Distribution — All Bullish FVGs",
+                        color_discrete_sequence=["#ef553b"]
+                    )
+                    fig_dd.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig_dd, use_container_width=True, key="fig_dd")
+
+                st.markdown("---")
+
+                # --- TP RANGE ANALYSIS ---
+                st.markdown("### TP Range Analysis")
+                st.caption("How far did price move up after FVG formed and for how many candles")
+
+                col6, col7, col8 = st.columns(3)
+                col6.metric("Avg Up Move", fvg_summary["avg_up_move"])
+                col7.metric("Max Up Move Ever", fvg_summary["max_up_move"])
+                col8.metric("Avg Candles Up Before Retrace", fvg_summary["avg_candles_up"])
+
+                # TP Bucket chart
+                buckets = fvg_summary["tp_buckets"]
+                bucket_df = pd.DataFrame({
+                    "Range": list(buckets.keys()),
+                    "Count": list(buckets.values())
+                })
+
+                fig_tp = px.bar(
+                    bucket_df,
+                    x="Range",
+                    y="Count",
+                    color="Count",
+                    text="Count",
+                    title="How Far Did Price Move After Bullish FVG",
+                    color_continuous_scale="Greens"
+                )
+                fig_tp.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    xaxis_tickangle=-20
+                )
+                st.plotly_chart(fig_tp, use_container_width=True, key="fig_tp")
+
+                st.markdown(f"""
+                <div style="background-color:#1e1e2e; padding:15px; border-radius:8px; border-left:5px solid #f0c040; margin-top:10px">
+                    <h4 style="color:#f0c040">Optimal TP Recommendation</h4>
+                    <p style="color:#aaa">Based on <b style="color:white">{fvg_summary['total_fvgs']}</b> Bullish FVGs analysed:</p>
+                    <p style="color:white">Average move after FVG: <b style="color:#00cc96">{fvg_summary['avg_up_move']}</b> points</p>
+                    <p style="color:white">Maximum move recorded: <b style="color:#00cc96">{fvg_summary['max_up_move']}</b> points</p>
+                    <p style="color:white">Price stayed up for average of <b style="color:#00cc96">{fvg_summary['avg_candles_up']}</b> candles before retracing</p>
+                    <p style="color:white">Recommended TP: <b style="color:#00cc96">{fvg_summary['avg_up_move']}</b> | Conservative TP: <b style="color:#00cc96">{round(fvg_summary['avg_up_move'] * 0.7, 2)}</b></p>
+                    <p style="color:white">Recommended SL buffer beyond gap bottom: <b style="color:#ef553b">{fvg_summary['avg_drawdown']}</b> points</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                # --- RAW FVG TABLE ---
+                with st.expander("View all FVG instances"):
+                    st.dataframe(fvg_behaviour, use_container_width=True)
+
+
