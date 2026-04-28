@@ -4,7 +4,7 @@ import websockets
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from detector import run_all_detectors, get_latest_signals, build_risk_stats
+from detector import run_all_detectors, get_latest_signals
 
 DERIV_WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
 
@@ -150,9 +150,7 @@ if run_button:
 
         with st.spinner("Running full analysis..."):
             results = run_all_detectors(df)
-            risk_stats = build_risk_stats(results["outcomes"])
-            signals = get_latest_signals(
-                df, lookback=signal_lookback, risk_stats=risk_stats)
+            signals = get_latest_signals(df, lookback=signal_lookback)
             confluence = results.get("confluence", pd.DataFrame())
 
         # --- MAIN TABS ---

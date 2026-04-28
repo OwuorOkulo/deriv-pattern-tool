@@ -213,7 +213,7 @@ def build_risk_stats(outcomes_df):
     return stats
 
 
-def get_latest_signals(df, forward_candles=10, lookback=50, risk_stats=None):
+def get_latest_signals(df, forward_candles=10, lookback=50,):
     signals = []
     recent_df = df.tail(lookback).reset_index(drop=True)
 
@@ -224,9 +224,7 @@ def get_latest_signals(df, forward_candles=10, lookback=50, risk_stats=None):
     }
 
     def get_stats(pattern):
-        if risk_stats is not None and pattern in risk_stats:
-            return risk_stats[pattern]
-        return default_stats.get(pattern, {"tp": 200, "sl": 150, "prob": "N/A", "rr": "N/A"})
+        return default_stats.get(pattern, {"tp": 200, "sl": 150, "mae": 80, "prob": "N/A", "rr": "N/A"})
 
     # Bullish FVG signals
     # Bullish FVG signals
