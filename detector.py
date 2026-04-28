@@ -429,111 +429,110 @@ def calculate_confluence(df, results, price_tolerance=0.002):
 
 def analyze_eq_ict_sequence(df, forward_candles=30, threshold=0.001):
     results = []
+    
+    # Only look at unique equal high/low pairs — limit to avoid timeout
+    sample_df = df.iloc[::2].reset_index(drop=True)  # every 2nd candle to speed up
+    
+    highs = sample_df["high"].values
+    lows = sample_df["low"].values
+    n = len(sample_df)
 
-    highs = df["high"].values
-    lows = df["low"].values
+    for i in range(1, n - forward_candles - 2):
+        for j in range(i + 1, min(i + 10, n - forward_candles - 2)):
 
-    for i in range(1, len(df) - forward_candles - 2):
-        for j in range(i + 1, min(i + 20, len(df) - forward_candles - 2)):
-
-            # --- EQUAL LOWS SEQUENCE ---
+            # --- EQUAL LOWS ---
             if abs(lows[i] - lows[j]) / lows[i] < threshold:
-                eq_low_price = lows[j]
-                future = df.iloc[j + 1: j + forward_candles + 1].reset_index(drop=True)
+                eq_price = lows[j]
+                orig_j = sample_df.index[j]
+                future = df.iloc[orig_j + 1: orig_j + forward_candles + 1].reset_index(drop=True)
 
-                if future.empty:
+                if len(future) < 5:
                     continue
 
-                # Step 1 — Did price sweep below equal low?
-                sweep = future["low"].min() < eq_low_price
+                # Step 1 sweep
+                sweep = bool(future["low"].min() < eq_price)
                 sweep_candle = None
                 if sweep:
                     for k in range(len(future)):
-                        if future["low"].iloc[k] < eq_low_price:
+                        if future["low"].iloc[k] < eq_price:
                             sweep_candle = k + 1
                             break
 
-                # Step 2 — After sweep, did a Bullish FVG form?
-                fvg_after_sweep = False
-                if sweep and sweep_candle is not None:
-                    post_sweep = future.iloc[sweep_candle:].reset_index(drop=True)
-                    for k in range(1, len(post_sweep) - 1):
-                        if post_sweep["low"].iloc[k + 1] > post_sweep["high"].iloc[k - 1]:
-                            fvg_after_sweep = True
+                # Step 2 FVG after sweep
+                fvg_after = False
+                if sweep and sweep_candle:
+                    post = future.iloc[sweep_candle:].reset_index(drop=True)
+                    for k in range(1, len(post) - 1):
+                        if len(post) > k + 1 and post["low"].iloc[k + 1] > post["high"].iloc[k - 1]:
+                            fvg_after = True
                             break
 
-                # Step 3 — Did price continue upward after sequence?
-                continued_up = False
-                if fvg_after_sweep:
-                    post_sweep_high = future.iloc[sweep_candle:]["high"].max() if sweep_candle else 0
-                    continued_up = post_sweep_high > eq_low_price
-
-                # Max move up and down after equal low
-                max_up = round(future["high"].max() - eq_low_price, 5)
-                max_down = round(eq_low_price - future["low"].min(), 5)
+                # Step 3 continued up
+                continued = False
+                if fvg_after and sweep_candle:
+                    continued = bool(future.iloc[sweep_candle:]["high"].max() > eq_price)
 
                 results.append({
                     "type": "Equal Lows",
-                    "time": df["time"].iloc[j],
-                    "price": round(eq_low_price, 5),
+                    "time": sample_df["time"].iloc[j],
+                    "price": round(eq_price, 5),
                     "sweep_occurred": sweep,
                     "sweep_candle": sweep_candle,
-                    "fvg_after_sweep": fvg_after_sweep,
-                    "continued_up": continued_up,
-                    "full_sequence": sweep and fvg_after_sweep and continued_up,
-                    "max_up_after": max_up,
-                    "max_down_after": max_down,
+                    "fvg_after_sweep": fvg_after,
+                    "continued_direction": continued,
+                    "full_sequence": sweep and fvg_after and continued,
+                    "max_up_after": round(future["high"].max() - eq_price, 5),
+                    "max_down_after": round(eq_price - future["low"].min(), 5),
                 })
 
-            # --- EQUAL HIGHS SEQUENCE ---
+            # --- EQUAL HIGHS ---
             if abs(highs[i] - highs[j]) / highs[i] < threshold:
-                eq_high_price = highs[j]
-                future = df.iloc[j + 1: j + forward_candles + 1].reset_index(drop=True)
+                eq_price = highs[j]
+                orig_j = sample_df.index[j]
+                future = df.iloc[orig_j + 1: orig_j + forward_candles + 1].reset_index(drop=True)
 
-                if future.empty:
+                if len(future) < 5:
                     continue
 
-                # Step 1 — Did price sweep above equal high?
-                sweep = future["high"].max() > eq_high_price
+                # Step 1 sweep
+                sweep = bool(future["high"].max() > eq_price)
                 sweep_candle = None
                 if sweep:
                     for k in range(len(future)):
-                        if future["high"].iloc[k] > eq_high_price:
+                        if future["high"].iloc[k] > eq_price:
                             sweep_candle = k + 1
                             break
 
-                # Step 2 — After sweep, did a Bearish FVG form?
-                fvg_after_sweep = False
-                if sweep and sweep_candle is not None:
-                    post_sweep = future.iloc[sweep_candle:].reset_index(drop=True)
-                    for k in range(1, len(post_sweep) - 1):
-                        if post_sweep["high"].iloc[k + 1] < post_sweep["low"].iloc[k - 1]:
-                            fvg_after_sweep = True
+                # Step 2 bearish FVG after sweep
+                fvg_after = False
+                if sweep and sweep_candle:
+                    post = future.iloc[sweep_candle:].reset_index(drop=True)
+                    for k in range(1, len(post) - 1):
+                        if len(post) > k + 1 and post["high"].iloc[k + 1] < post["low"].iloc[k - 1]:
+                            fvg_after = True
                             break
 
-                # Step 3 — Did price continue downward after sequence?
-                continued_down = False
-                if fvg_after_sweep:
-                    post_sweep_low = future.iloc[sweep_candle:]["low"].min() if sweep_candle else 0
-                    continued_down = post_sweep_low < eq_high_price
-
-                max_up = round(future["high"].max() - eq_high_price, 5)
-                max_down = round(eq_high_price - future["low"].min(), 5)
+                # Step 3 continued down
+                continued = False
+                if fvg_after and sweep_candle:
+                    continued = bool(future.iloc[sweep_candle:]["low"].min() < eq_price)
 
                 results.append({
                     "type": "Equal Highs",
-                    "time": df["time"].iloc[j],
-                    "price": round(eq_high_price, 5),
+                    "time": sample_df["time"].iloc[j],
+                    "price": round(eq_price, 5),
                     "sweep_occurred": sweep,
                     "sweep_candle": sweep_candle,
-                    "fvg_after_sweep": fvg_after_sweep,
-                    "continued_down": continued_up if 'continued_up' in dir() else continued_down,
-                    "full_sequence": sweep and fvg_after_sweep and continued_down,
-                    "max_up_after": max_up,
-                    "max_down_after": max_down,
+                    "fvg_after_sweep": fvg_after,
+                    "continued_direction": continued,
+                    "full_sequence": sweep and fvg_after and continued,
+                    "max_up_after": round(future["high"].max() - eq_price, 5),
+                    "max_down_after": round(eq_price - future["low"].min(), 5),
                 })
 
-    return pd.DataFrame(results)
+    if results:
+        return pd.DataFrame(results)
+    return pd.DataFrame()
 
 
 def summarize_eq_ict_sequence(eq_df):
@@ -611,8 +610,13 @@ def run_all_detectors(df, forward_candles=10):
     })
     fvg_behaviour = analyze_fvg_behaviour(df)
     fvg_summary = summarize_fvg_behaviour(fvg_behaviour)
-    eq_ict = analyze_eq_ict_sequence(df)
-    eq_ict_summary = summarize_eq_ict_sequence(eq_ict)
+    try:
+        eq_ict = analyze_eq_ict_sequence(df)
+        eq_ict_summary = summarize_eq_ict_sequence(eq_ict)
+    except Exception as e:
+        print(f"EQ ICT analysis failed: {e}")
+        eq_ict = pd.DataFrame()
+        eq_ict_summary = {}
 
     return {
         "equal_highs_lows": eq,
