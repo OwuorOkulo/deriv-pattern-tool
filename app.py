@@ -9,8 +9,6 @@ from detector import run_all_detectors
 DERIV_WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
 
 # --- DATA FETCHING ---
-
-
 async def get_candles(symbol, granularity, count=500):
     async with websockets.connect(DERIV_WS_URL) as ws:
         payload = {
@@ -27,67 +25,16 @@ async def get_candles(symbol, granularity, count=500):
             return []
         return response["candles"]
 
-
 def build_dataframe(candles):
     df = pd.DataFrame(candles)
     df["time"] = pd.to_datetime(df["epoch"], unit="s")
     df = df[["time", "open", "high", "low", "close"]]
-    df[["open", "high", "low", "close"]] = df[[
-        "open", "high", "low", "close"]].astype(float)
+    df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]].astype(float)
     df = df.reset_index(drop=True)
     return df
 
-
 def fetch_data(symbol, granularity, count):
     return asyncio.run(get_candles(symbol, granularity, count))
-
-
-def render_signal_card(row, direction_color):
-    pattern = row["pattern"]
-    direction = row["direction"]
-    time = row["time"]
-    win_prob = row["win_probability"]
-    rr = row["rr_ratio"]
-    entry = row["entry"]
-    tp = row["suggested_tp"]
-    sl = row["suggested_sl"]
-
-    fvg_line = ""
-    if pattern == "Bullish FVG":
-        try:
-            gb = row["gap_bottom"]
-            gt = row["gap_top"]
-            gm = row["gap_midpoint"]
-            if pd.notna(gb):
-                fvg_line = f'<div style="margin:5px 0; color:#aaa">📦 FVG Zone: <b style="color:white">{gb}</b> to <b style="color:white">{gt}</b> | Midpoint: <b style="color:white">{gm}</b></div>'
-        except Exception:
-            fvg_line = ""
-
-    html = f"""
-    <div style="background-color:#1e1e2e; border-left:5px solid {direction_color}; padding:15px; margin-bottom:10px; border-radius:5px;">
-        <h4 style="color:{direction_color}; margin:0">{direction} — {pattern}</h4>
-        <div style="color:#aaa; margin:5px 0">🕒 {time} &nbsp;|&nbsp; 🎯 Win Probability: <b style="color:white">{win_prob}</b> &nbsp;|&nbsp; ⚖️ R:R: <b style="color:white">{rr}</b></div>
-        <div style="margin:5px 0">🟡 Entry (candle 4 open): <b style="color:#f0c040">{entry}</b></div>
-        <div style="margin:5px 0">✅ TP: <b style="color:#00cc96">{tp}</b> &nbsp;|&nbsp; ❌ SL: <b style="color:#ef553b">{sl}</b></div>
-        {fvg_line}
-        <div style="color:#555; margin-top:8px; font-size:0.8em">⚠️ Refresh tool to check for newer signals</div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
-
-
-def render_confluence_card(row):
-    html = f"""
-    <div style="background-color:#1e1e2e; border-left:6px solid {row['color']}; padding:15px; margin-bottom:12px; border-radius:6px;">
-        <h4 style="color:{row['color']}; margin:0">{row['strength']} — Confluence Score: {row['score']}</h4>
-        <div style="color:#aaa; margin:5px 0">🕒 {row['time']}</div>
-        <div style="margin:5px 0; color:#ccc">📊 Factors: <b style="color:white">{row['reasons']}</b></div>
-        <div style="margin:5px 0">🎯 Entry: <b style="color:#f0c040">{row['entry']}</b> &nbsp;|&nbsp; ✅ TP: <b style="color:#00cc96">{row['suggested_tp']}</b> &nbsp;|&nbsp; ❌ SL: <b style="color:#ef553b">{row['suggested_sl']}</b></div>
-        <div style="margin:5px 0">📦 FVG Zone: <b style="color:white">{row['gap_bottom']}</b> to <b style="color:white">{row['gap_top']}</b></div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
-
 
 # --- UI ---
 st.set_page_config(page_title="Deriv Pattern Tool", layout="wide")
@@ -137,8 +84,7 @@ run_button = st.sidebar.button("Run Analysis", use_container_width=True)
 # --- MAIN LOGIC ---
 if run_button:
     with st.spinner("Fetching data from Deriv..."):
-        candles = fetch_data(
-            symbol_map[symbol], timeframe_map[timeframe], candle_count)
+        candles = fetch_data(symbol_map[symbol], timeframe_map[timeframe], candle_count)
 
     if not candles:
         st.error("Failed to fetch data. Check your connection.")
@@ -148,23 +94,21 @@ if run_button:
 
         with st.spinner("Running full analysis..."):
             results = run_all_detectors(df)
-            pass
+
         # --- MAIN TABS ---
-        tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        tab3, tab4, tab5, tab6 = st.tabs([
             "📊 Pattern Stats",
             "⚖️ Risk Management",
             "🔬 FVG Deep Analysis",
-            "EQ Levels ICT analysis",
             "🔍 Raw Data"
         ])
 
-        # ── TAB 3: PATTERN STATS ──
+        # ── TAB 1: PATTERN STATS ──
         with tab3:
             st.subheader("Pattern Frequency & Outcome Probabilities")
 
             all_patterns = []
-            skip_keys = ["outcomes", "summary", "confluence",
-                         "fvg_behaviour", "fvg_summary", "eq_ict", "eq_ict_summary"]
+            skip_keys = ["outcomes", "summary", "confluence", "fvg_behaviour", "fvg_summary"]
             for key, frame in results.items():
                 if key in skip_keys:
                     continue
@@ -232,25 +176,21 @@ if run_button:
 
             st.markdown("---")
             st.caption("Detailed Pattern Breakdown")
-            breakdown_tabs = st.tabs(
-                ["Equal Highs/Lows", "Fair Value Gaps", "BOS / CHoCH", "Consolidation"])
+            breakdown_tabs = st.tabs(["Equal Highs/Lows", "Fair Value Gaps", "BOS / CHoCH", "Consolidation"])
 
             with breakdown_tabs[0]:
-                st.dataframe(results["equal_highs_lows"],
-                             use_container_width=True)
+                st.dataframe(results["equal_highs_lows"], use_container_width=True)
             with breakdown_tabs[1]:
                 st.dataframe(results["fvg"], use_container_width=True)
             with breakdown_tabs[2]:
                 st.dataframe(results["bos_choch"], use_container_width=True)
             with breakdown_tabs[3]:
-                st.dataframe(results["consolidation"],
-                             use_container_width=True)
+                st.dataframe(results["consolidation"], use_container_width=True)
 
-        # ── TAB 4: RISK MANAGEMENT ──
+        # ── TAB 2: RISK MANAGEMENT ──
         with tab4:
             st.subheader("Risk Management")
-            st.caption(
-                "Average moves, MAE and R:R per pattern — use these to set your TP and SL")
+            st.caption("Average moves, MAE and R:R per pattern")
 
             if not results["outcomes"].empty:
                 risk = results["outcomes"].groupby("pattern").agg(
@@ -262,8 +202,7 @@ if run_button:
                     max_mae=("mae", "max"),
                 ).reset_index()
 
-                risk["avg_rr_ratio"] = (
-                    risk["avg_up_move"] / risk["avg_down_move"]).round(2)
+                risk["avg_rr_ratio"] = (risk["avg_up_move"] / risk["avg_down_move"]).round(2)
                 risk["avg_up_move"] = risk["avg_up_move"].round(5)
                 risk["avg_down_move"] = risk["avg_down_move"].round(5)
                 risk["max_up_move"] = risk["max_up_move"].round(5)
@@ -320,11 +259,10 @@ if run_button:
                 )
                 st.plotly_chart(fig4, use_container_width=True, key="fig4")
 
-        # ── TAB 5: FVG DEEP ANALYSIS ──
+        # ── TAB 3: FVG DEEP ANALYSIS ──
         with tab5:
             st.subheader("Bullish FVG — Deep Behaviour Analysis")
-            st.caption(
-                "Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
+            st.caption("Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
 
             fvg_summary = results.get("fvg_summary", {})
             fvg_behaviour = results.get("fvg_behaviour", pd.DataFrame())
@@ -335,15 +273,13 @@ if run_button:
                 st.markdown("### Overview")
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Bullish FVGs", fvg_summary["total_fvgs"])
-                m2.metric(
-                    "Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
+                m2.metric("Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
                 m3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
                 m4.metric("Max Drawdown", fvg_summary["max_drawdown"])
 
                 st.markdown("---")
                 st.markdown("### Failure Analysis")
-                st.caption(
-                    "A failure = price came into the FVG, traded below gap bottom and hit SL")
+                st.caption("A failure = price came into the FVG, traded below gap bottom and hit SL")
 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -368,14 +304,12 @@ if run_button:
 
                 st.markdown("---")
                 st.markdown("### Drawdown Analysis")
-                st.caption(
-                    "How far did price drop from entry before recovering — on ALL FVGs")
+                st.caption("How far did price drop from entry before recovering")
 
                 col3, col4, col5 = st.columns(3)
                 col3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
                 col4.metric("Max Drawdown Ever", fvg_summary["max_drawdown"])
-                col5.metric("FVGs with above avg drawdown",
-                            fvg_summary["drawdown_over_avg"])
+                col5.metric("FVGs with above avg drawdown", fvg_summary["drawdown_over_avg"])
 
                 if not fvg_behaviour.empty:
                     fig_dd = px.histogram(
@@ -389,19 +323,16 @@ if run_button:
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)"
                     )
-                    st.plotly_chart(
-                        fig_dd, use_container_width=True, key="fig_dd")
+                    st.plotly_chart(fig_dd, use_container_width=True, key="fig_dd")
 
                 st.markdown("---")
                 st.markdown("### TP Range Analysis")
-                st.caption(
-                    "How far did price move up after FVG formed and for how many candles")
+                st.caption("How far did price move up after FVG formed")
 
                 col6, col7, col8 = st.columns(3)
                 col6.metric("Avg Up Move", fvg_summary["avg_up_move"])
                 col7.metric("Max Up Move Ever", fvg_summary["max_up_move"])
-                col8.metric("Avg Candles Up Before Retrace",
-                            fvg_summary["avg_candles_up"])
+                col8.metric("Avg Candles Up Before Retrace", fvg_summary["avg_candles_up"])
 
                 buckets = fvg_summary["tp_buckets"]
                 bucket_df = pd.DataFrame({
@@ -441,85 +372,8 @@ if run_button:
                 with st.expander("View all FVG instances"):
                     st.dataframe(fvg_behaviour, use_container_width=True)
 
-        # ── TAB 7: EQ LEVELS ICT ANALYSIS ──
-        with tab7:
-            st.subheader("Equal Highs & Lows — ICT Sequence Analysis")
-            st.caption(
-                "Does price sweep liquidity then displace with FVG and continue? ICT validated on this instrument.")
-
-            eq_ict_summary = results.get("eq_ict_summary", {})
-            eq_ict = results.get("eq_ict", pd.DataFrame())
-
-            if not eq_ict_summary:
-                st.info("No equal highs/lows ICT data available.")
-            else:
-                for eq_type, data in eq_ict_summary.items():
-                    color = "#00cc96" if eq_type == "Equal Lows" else "#ef553b"
-                    direction = "Bullish" if eq_type == "Equal Lows" else "Bearish"
-
-                    st.markdown(f"### {eq_type} — ICT Sequence")
-
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Total Formations", data["total"])
-                    m2.metric("Sweep Rate", f"{data['sweep_rate']}%")
-                    m3.metric("FVG After Sweep",
-                              f"{data['fvg_after_sweep_rate']}%")
-                    m4.metric("Full ICT Sequence",
-                              f"{data['full_sequence_rate']}%")
-
-                    st.markdown(f"""
-                    <div style="background-color:#1e1e2e; padding:15px; border-radius:8px; border-left:5px solid {color}; margin:10px 0">
-                        <h4 style="color:{color}">ICT Sequence Breakdown — {eq_type}</h4>
-                        <p style="color:#aaa">Total {eq_type} detected: <b style="color:white">{data['total']}</b></p>
-                        <p style="color:#aaa">Step 1 — Price swept liquidity: <b style="color:white">{data['sweep_count']} times ({data['sweep_rate']}%)</b></p>
-                        <p style="color:#aaa">Step 2 — FVG formed after sweep: <b style="color:white">{data['fvg_after_sweep_count']} times ({data['fvg_after_sweep_rate']}%)</b></p>
-                        <p style="color:#aaa">Step 3 — Full ICT sequence completed: <b style="color:white">{data['full_sequence_count']} times ({data['full_sequence_rate']}%)</b></p>
-                        <hr style="border-color:#333">
-                        <p style="color:#aaa">Avg move UP after formation: <b style="color:#00cc96">{data['avg_up_after']}</b></p>
-                        <p style="color:#aaa">Avg move DOWN after formation: <b style="color:#ef553b">{data['avg_down_after']}</b></p>
-                        <p style="color:#aaa">Max move UP recorded: <b style="color:#00cc96">{data['max_up_after']}</b></p>
-                        <p style="color:#aaa">Max move DOWN recorded: <b style="color:#ef553b">{data['max_down_after']}</b></p>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    st.markdown("---")
-
-                # ICT sequence comparison chart
-                if len(eq_ict_summary) == 2:
-                    chart_data = pd.DataFrame({
-                        "Type": list(eq_ict_summary.keys()),
-                        "Sweep Rate %": [v["sweep_rate"] for v in eq_ict_summary.values()],
-                        "FVG After Sweep %": [v["fvg_after_sweep_rate"] for v in eq_ict_summary.values()],
-                        "Full Sequence %": [v["full_sequence_rate"] for v in eq_ict_summary.values()],
-                    })
-
-                    chart_melted = chart_data.melt(
-                        id_vars="Type", var_name="Step", value_name="Rate %")
-
-                    fig_ict = px.bar(
-                        chart_melted,
-                        x="Step",
-                        y="Rate %",
-                        color="Type",
-                        barmode="group",
-                        title="ICT Sequence Completion Rate — Equal Highs vs Equal Lows",
-                        color_discrete_map={
-                            "Equal Lows": "#00cc96",
-                            "Equal Highs": "#ef553b"
-                        }
-                    )
-                    fig_ict.update_layout(
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                    )
-                    st.plotly_chart(
-                        fig_ict, use_container_width=True, key="fig_ict")
-
-                with st.expander("View raw ICT sequence data"):
-                    st.dataframe(eq_ict, use_container_width=True)
-
-        # ── TAB 6: RAW DATA ──
-        with tab7:
+        # ── TAB 4: RAW DATA ──
+        with tab6:
             st.subheader("Raw Candle Data")
             st.caption(f"{len(df)} candles — {symbol} {timeframe}")
             st.dataframe(df, use_container_width=True)
