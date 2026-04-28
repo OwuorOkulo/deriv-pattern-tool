@@ -9,8 +9,6 @@ from detector import run_all_detectors, get_latest_signals
 DERIV_WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
 
 # --- DATA FETCHING ---
-
-
 async def get_candles(symbol, granularity, count=500):
     async with websockets.connect(DERIV_WS_URL) as ws:
         payload = {
@@ -27,20 +25,16 @@ async def get_candles(symbol, granularity, count=500):
             return []
         return response["candles"]
 
-
 def build_dataframe(candles):
     df = pd.DataFrame(candles)
     df["time"] = pd.to_datetime(df["epoch"], unit="s")
     df = df[["time", "open", "high", "low", "close"]]
-    df[["open", "high", "low", "close"]] = df[[
-        "open", "high", "low", "close"]].astype(float)
+    df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]].astype(float)
     df = df.reset_index(drop=True)
     return df
 
-
 def fetch_data(symbol, granularity, count):
     return asyncio.run(get_candles(symbol, granularity, count))
-
 
 def render_signal_card(row, direction_color):
     pattern = row["pattern"]
@@ -75,7 +69,6 @@ def render_signal_card(row, direction_color):
     """
     st.markdown(html, unsafe_allow_html=True)
 
-
 def render_confluence_card(row):
     html = f"""
     <div style="background-color:#1e1e2e; border-left:6px solid {row['color']}; padding:15px; margin-bottom:12px; border-radius:6px;">
@@ -87,7 +80,6 @@ def render_confluence_card(row):
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
-
 
 # --- UI ---
 st.set_page_config(page_title="Deriv Pattern Tool", layout="wide")
@@ -132,15 +124,13 @@ timeframe_map = {
 }
 
 candle_count = st.sidebar.slider("Candle Count", 100, 5000, 500, 100)
-signal_lookback = st.sidebar.slider(
-    "Signal Lookback (candles)", 10, 200, 50, 10)
+signal_lookback = st.sidebar.slider("Signal Lookback (candles)", 10, 200, 50, 10)
 run_button = st.sidebar.button("Run Analysis", use_container_width=True)
 
 # --- MAIN LOGIC ---
 if run_button:
     with st.spinner("Fetching data from Deriv..."):
-        candles = fetch_data(
-            symbol_map[symbol], timeframe_map[timeframe], candle_count)
+        candles = fetch_data(symbol_map[symbol], timeframe_map[timeframe], candle_count)
 
     if not candles:
         st.error("Failed to fetch data. Check your connection.")
@@ -166,34 +156,27 @@ if run_button:
         # ── TAB 1: SIGNALS ──
         with tab1:
             st.subheader("Latest Signals")
-            st.caption(
-                f"Showing top 5 most recent from last {signal_lookback} candles")
+            st.caption(f"Showing top 5 most recent from last {signal_lookback} candles")
 
             if signals.empty:
                 st.info("No signals detected.")
             else:
                 sort_by = st.selectbox(
                     "Sort signals by",
-                    ["Most Recent", "Win Probability",
-                        "R:R Ratio", "Pattern Type"],
+                    ["Most Recent", "Win Probability", "R:R Ratio", "Pattern Type"],
                     key="signal_sort"
                 )
 
                 sorted_signals = signals.copy()
 
                 if sort_by == "Most Recent":
-                    sorted_signals = sorted_signals.sort_values(
-                        "time", ascending=False)
+                    sorted_signals = sorted_signals.sort_values("time", ascending=False)
                 elif sort_by == "Win Probability":
-                    sorted_signals["prob_val"] = sorted_signals["win_probability"].str.replace(
-                        "%", "").astype(float)
-                    sorted_signals = sorted_signals.sort_values(
-                        "prob_val", ascending=False)
+                    sorted_signals["prob_val"] = sorted_signals["win_probability"].str.replace("%", "").astype(float)
+                    sorted_signals = sorted_signals.sort_values("prob_val", ascending=False)
                 elif sort_by == "R:R Ratio":
-                    sorted_signals["rr_val"] = sorted_signals["rr_ratio"].astype(
-                        float)
-                    sorted_signals = sorted_signals.sort_values(
-                        "rr_val", ascending=False)
+                    sorted_signals["rr_val"] = sorted_signals["rr_ratio"].astype(float)
+                    sorted_signals = sorted_signals.sort_values("rr_val", ascending=False)
                 elif sort_by == "Pattern Type":
                     sorted_signals = sorted_signals.sort_values("pattern")
 
@@ -205,25 +188,21 @@ if run_button:
 
                 st.markdown("---")
                 st.caption("All signals this session")
-                display_cols = ["time", "pattern", "direction", "entry",
-                                "suggested_tp", "suggested_sl", "win_probability", "rr_ratio"]
+                display_cols = ["time", "pattern", "direction", "entry", "suggested_tp", "suggested_sl", "win_probability", "rr_ratio"]
                 st.dataframe(signals[display_cols], use_container_width=True)
 
         # ── TAB 2: CONFLUENCE ──
         with tab2:
             st.subheader("Confluence Scored Setups")
-            st.caption(
-                "Signals ranked by how many patterns stack at the same level")
+            st.caption("Signals ranked by how many patterns stack at the same level")
 
             if confluence.empty:
                 st.info("No confluence signals found.")
             else:
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("Total Setups", len(confluence))
-                col_b.metric("High Confluence (6+)",
-                             len(confluence[confluence["score"] >= 6]))
-                col_c.metric(
-                    "Strong (4-5)", len(confluence[confluence["score"].between(4, 5)]))
+                col_b.metric("High Confluence (6+)", len(confluence[confluence["score"] >= 6]))
+                col_c.metric("Strong (4-5)", len(confluence[confluence["score"].between(4, 5)]))
 
                 st.markdown("---")
 
@@ -263,8 +242,7 @@ if run_button:
             st.subheader("Pattern Frequency & Outcome Probabilities")
 
             all_patterns = []
-            skip_keys = ["outcomes", "summary",
-                         "confluence", "fvg_behaviour", "fvg_summary"]
+            skip_keys = ["outcomes", "summary", "confluence", "fvg_behaviour", "fvg_summary"]
             for key, frame in results.items():
                 if key in skip_keys:
                     continue
@@ -332,25 +310,21 @@ if run_button:
 
             st.markdown("---")
             st.caption("Detailed Pattern Breakdown")
-            breakdown_tabs = st.tabs(
-                ["Equal Highs/Lows", "Fair Value Gaps", "BOS / CHoCH", "Consolidation"])
+            breakdown_tabs = st.tabs(["Equal Highs/Lows", "Fair Value Gaps", "BOS / CHoCH", "Consolidation"])
 
             with breakdown_tabs[0]:
-                st.dataframe(results["equal_highs_lows"],
-                             use_container_width=True)
+                st.dataframe(results["equal_highs_lows"], use_container_width=True)
             with breakdown_tabs[1]:
                 st.dataframe(results["fvg"], use_container_width=True)
             with breakdown_tabs[2]:
                 st.dataframe(results["bos_choch"], use_container_width=True)
             with breakdown_tabs[3]:
-                st.dataframe(results["consolidation"],
-                             use_container_width=True)
+                st.dataframe(results["consolidation"], use_container_width=True)
 
         # ── TAB 4: RISK MANAGEMENT ──
         with tab4:
             st.subheader("Risk Management")
-            st.caption(
-                "Average moves, MAE and R:R per pattern — use these to set your TP and SL")
+            st.caption("Average moves, MAE and R:R per pattern — use these to set your TP and SL")
 
             if not results["outcomes"].empty:
                 risk = results["outcomes"].groupby("pattern").agg(
@@ -362,8 +336,7 @@ if run_button:
                     max_mae=("mae", "max"),
                 ).reset_index()
 
-                risk["avg_rr_ratio"] = (
-                    risk["avg_up_move"] / risk["avg_down_move"]).round(2)
+                risk["avg_rr_ratio"] = (risk["avg_up_move"] / risk["avg_down_move"]).round(2)
                 risk["avg_up_move"] = risk["avg_up_move"].round(5)
                 risk["avg_down_move"] = risk["avg_down_move"].round(5)
                 risk["max_up_move"] = risk["max_up_move"].round(5)
@@ -383,7 +356,6 @@ if run_button:
                 ]
 
                 st.dataframe(risk, use_container_width=True)
-
                 st.markdown("---")
 
                 fig3 = px.bar(
@@ -421,17 +393,10 @@ if run_button:
                 )
                 st.plotly_chart(fig4, use_container_width=True, key="fig4")
 
-        # ── TAB 5: RAW DATA ──
-        with tab6:
-            st.subheader("Raw Candle Data")
-            st.caption(f"{len(df)} candles — {symbol} {timeframe}")
-            st.dataframe(df, use_container_width=True)
-
-        # ── TAB 6: FVG DEEP ANALYSIS ──
-        with tab6:
+        # ── TAB 5: FVG DEEP ANALYSIS ──
+        with tab5:
             st.subheader("Bullish FVG — Deep Behaviour Analysis")
-            st.caption(
-                "Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
+            st.caption("Every Bullish FVG in the dataset analysed for failure, drawdown and TP range")
 
             fvg_summary = results.get("fvg_summary", {})
             fvg_behaviour = results.get("fvg_behaviour", pd.DataFrame())
@@ -439,21 +404,16 @@ if run_button:
             if not fvg_summary:
                 st.info("No FVG behaviour data available.")
             else:
-                # --- TOP METRICS ---
                 st.markdown("### Overview")
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Bullish FVGs", fvg_summary["total_fvgs"])
-                m2.metric(
-                    "Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
+                m2.metric("Failures", f"{fvg_summary['failure_count']} ({fvg_summary['failure_rate']}%)")
                 m3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
                 m4.metric("Max Drawdown", fvg_summary["max_drawdown"])
 
                 st.markdown("---")
-
-                # --- FAILURE ANALYSIS ---
                 st.markdown("### Failure Analysis")
-                st.caption(
-                    "A failure = price came into the FVG, traded below gap bottom and hit SL")
+                st.caption("A failure = price came into the FVG, traded below gap bottom and hit SL")
 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -477,17 +437,13 @@ if run_button:
                     """, unsafe_allow_html=True)
 
                 st.markdown("---")
-
-                # --- DRAWDOWN ANALYSIS ---
                 st.markdown("### Drawdown Analysis")
-                st.caption(
-                    "How far did price drop from entry before recovering — on ALL FVGs")
+                st.caption("How far did price drop from entry before recovering — on ALL FVGs")
 
                 col3, col4, col5 = st.columns(3)
                 col3.metric("Avg Drawdown", fvg_summary["avg_drawdown"])
                 col4.metric("Max Drawdown Ever", fvg_summary["max_drawdown"])
-                col5.metric("FVGs with above avg drawdown",
-                            fvg_summary["drawdown_over_avg"])
+                col5.metric("FVGs with above avg drawdown", fvg_summary["drawdown_over_avg"])
 
                 if not fvg_behaviour.empty:
                     fig_dd = px.histogram(
@@ -501,23 +457,17 @@ if run_button:
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)"
                     )
-                    st.plotly_chart(
-                        fig_dd, use_container_width=True, key="fig_dd")
+                    st.plotly_chart(fig_dd, use_container_width=True, key="fig_dd")
 
                 st.markdown("---")
-
-                # --- TP RANGE ANALYSIS ---
                 st.markdown("### TP Range Analysis")
-                st.caption(
-                    "How far did price move up after FVG formed and for how many candles")
+                st.caption("How far did price move up after FVG formed and for how many candles")
 
                 col6, col7, col8 = st.columns(3)
                 col6.metric("Avg Up Move", fvg_summary["avg_up_move"])
                 col7.metric("Max Up Move Ever", fvg_summary["max_up_move"])
-                col8.metric("Avg Candles Up Before Retrace",
-                            fvg_summary["avg_candles_up"])
+                col8.metric("Avg Candles Up Before Retrace", fvg_summary["avg_candles_up"])
 
-                # TP Bucket chart
                 buckets = fvg_summary["tp_buckets"]
                 bucket_df = pd.DataFrame({
                     "Range": list(buckets.keys()),
@@ -553,7 +503,11 @@ if run_button:
                 """, unsafe_allow_html=True)
 
                 st.markdown("---")
-
-                # --- RAW FVG TABLE ---
                 with st.expander("View all FVG instances"):
                     st.dataframe(fvg_behaviour, use_container_width=True)
+
+        # ── TAB 6: RAW DATA ──
+        with tab6:
+            st.subheader("Raw Candle Data")
+            st.caption(f"{len(df)} candles — {symbol} {timeframe}")
+            st.dataframe(df, use_container_width=True)
