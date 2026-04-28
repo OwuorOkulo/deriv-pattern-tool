@@ -263,10 +263,12 @@ if run_button:
             st.subheader("Pattern Frequency & Outcome Probabilities")
 
             all_patterns = []
+            skip_keys = ["outcomes", "summary",
+                         "confluence", "fvg_behaviour", "fvg_summary"]
             for key, frame in results.items():
-                if key in ["outcomes", "summary", "confluence"]:
+                if key in skip_keys:
                     continue
-                if not frame.empty and "pattern" in frame.columns:
+                if isinstance(frame, pd.DataFrame) and not frame.empty and "pattern" in frame.columns:
                     all_patterns.append(frame[["pattern"]])
 
             if all_patterns:
