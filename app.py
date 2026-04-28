@@ -4,7 +4,7 @@ import websockets
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from detector import run_all_detectors, get_latest_signals
+from detector import run_all_detectors
 
 DERIV_WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
 
@@ -124,7 +124,6 @@ timeframe_map = {
 }
 
 candle_count = st.sidebar.slider("Candle Count", 100, 5000, 500, 100)
-signal_lookback = st.sidebar.slider("Signal Lookback (candles)", 10, 200, 50, 10)
 run_button = st.sidebar.button("Run Analysis", use_container_width=True)
 
 # --- MAIN LOGIC ---
@@ -140,103 +139,16 @@ if run_button:
 
         with st.spinner("Running full analysis..."):
             results = run_all_detectors(df)
-            signals = get_latest_signals(df, lookback=signal_lookback)
-            confluence = results.get("confluence", pd.DataFrame())
-
+            pass
         # --- MAIN TABS ---
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            "🚨 Signals",
-            "🎯 Confluence",
+        tab3, tab4, tab5, tab6 = st.tabs([
             "📊 Pattern Stats",
             "⚖️ Risk Management",
             "🔬 FVG Deep Analysis",
             "🔍 Raw Data"
         ])
 
-        # ── TAB 1: SIGNALS ──
-        with tab1:
-            st.subheader("Latest Signals")
-            st.caption(f"Showing top 5 most recent from last {signal_lookback} candles")
-
-            if signals.empty:
-                st.info("No signals detected.")
-            else:
-                sort_by = st.selectbox(
-                    "Sort signals by",
-                    ["Most Recent", "Win Probability", "R:R Ratio", "Pattern Type"],
-                    key="signal_sort"
-                )
-
-                sorted_signals = signals.copy()
-
-                if sort_by == "Most Recent":
-                    sorted_signals = sorted_signals.sort_values("time", ascending=False)
-                elif sort_by == "Win Probability":
-                    sorted_signals["prob_val"] = sorted_signals["win_probability"].str.replace("%", "").astype(float)
-                    sorted_signals = sorted_signals.sort_values("prob_val", ascending=False)
-                elif sort_by == "R:R Ratio":
-                    sorted_signals["rr_val"] = sorted_signals["rr_ratio"].astype(float)
-                    sorted_signals = sorted_signals.sort_values("rr_val", ascending=False)
-                elif sort_by == "Pattern Type":
-                    sorted_signals = sorted_signals.sort_values("pattern")
-
-                top5 = sorted_signals.head(5)
-
-                for _, row in top5.iterrows():
-                    direction_color = "#00cc96" if row["direction"] == "BUY" else "#ef553b"
-                    render_signal_card(row, direction_color)
-
-                st.markdown("---")
-                st.caption("All signals this session")
-                display_cols = ["time", "pattern", "direction", "entry", "suggested_tp", "suggested_sl", "win_probability", "rr_ratio"]
-                st.dataframe(signals[display_cols], use_container_width=True)
-
-        # ── TAB 2: CONFLUENCE ──
-        with tab2:
-            st.subheader("Confluence Scored Setups")
-            st.caption("Signals ranked by how many patterns stack at the same level")
-
-            if confluence.empty:
-                st.info("No confluence signals found.")
-            else:
-                col_a, col_b, col_c = st.columns(3)
-                col_a.metric("Total Setups", len(confluence))
-                col_b.metric("High Confluence (6+)", len(confluence[confluence["score"] >= 6]))
-                col_c.metric("Strong (4-5)", len(confluence[confluence["score"].between(4, 5)]))
-
-                st.markdown("---")
-
-                filter_strength = st.selectbox(
-                    "Filter by strength",
-                    ["All", "🔥 HIGH only", "⚡ STRONG+", "👀 MODERATE+"],
-                    key="conf_filter"
-                )
-
-                filtered = confluence.copy()
-                if filter_strength == "🔥 HIGH only":
-                    filtered = filtered[filtered["score"] >= 6]
-                elif filter_strength == "⚡ STRONG+":
-                    filtered = filtered[filtered["score"] >= 4]
-                elif filter_strength == "👀 MODERATE+":
-                    filtered = filtered[filtered["score"] >= 3]
-
-                for _, row in filtered.head(10).iterrows():
-                    render_confluence_card(row)
-
-                st.markdown("---")
-                fig5 = px.histogram(
-                    confluence,
-                    x="score",
-                    nbins=10,
-                    title="Confluence Score Distribution",
-                    color_discrete_sequence=["#00cc96"]
-                )
-                fig5.update_layout(
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)"
-                )
-                st.plotly_chart(fig5, use_container_width=True, key="fig5")
-
+    
         # ── TAB 3: PATTERN STATS ──
         with tab3:
             st.subheader("Pattern Frequency & Outcome Probabilities")
