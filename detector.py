@@ -427,6 +427,155 @@ def calculate_confluence(df, results, price_tolerance=0.002):
 
     return pd.DataFrame()
 
+def analyze_eq_ict_sequence(df, forward_candles=30, threshold=0.001):
+    results = []
+
+    highs = df["high"].values
+    lows = df["low"].values
+
+    for i in range(1, len(df) - forward_candles - 2):
+        for j in range(i + 1, min(i + 20, len(df) - forward_candles - 2)):
+
+            # --- EQUAL LOWS SEQUENCE ---
+            if abs(lows[i] - lows[j]) / lows[i] < threshold:
+                eq_low_price = lows[j]
+                future = df.iloc[j + 1: j + forward_candles + 1].reset_index(drop=True)
+
+                if future.empty:
+                    continue
+
+                # Step 1 — Did price sweep below equal low?
+                sweep = future["low"].min() < eq_low_price
+                sweep_candle = None
+                if sweep:
+                    for k in range(len(future)):
+                        if future["low"].iloc[k] < eq_low_price:
+                            sweep_candle = k + 1
+                            break
+
+                # Step 2 — After sweep, did a Bullish FVG form?
+                fvg_after_sweep = False
+                if sweep and sweep_candle is not None:
+                    post_sweep = future.iloc[sweep_candle:].reset_index(drop=True)
+                    for k in range(1, len(post_sweep) - 1):
+                        if post_sweep["low"].iloc[k + 1] > post_sweep["high"].iloc[k - 1]:
+                            fvg_after_sweep = True
+                            break
+
+                # Step 3 — Did price continue upward after sequence?
+                continued_up = False
+                if fvg_after_sweep:
+                    post_sweep_high = future.iloc[sweep_candle:]["high"].max() if sweep_candle else 0
+                    continued_up = post_sweep_high > eq_low_price
+
+                # Max move up and down after equal low
+                max_up = round(future["high"].max() - eq_low_price, 5)
+                max_down = round(eq_low_price - future["low"].min(), 5)
+
+                results.append({
+                    "type": "Equal Lows",
+                    "time": df["time"].iloc[j],
+                    "price": round(eq_low_price, 5),
+                    "sweep_occurred": sweep,
+                    "sweep_candle": sweep_candle,
+                    "fvg_after_sweep": fvg_after_sweep,
+                    "continued_up": continued_up,
+                    "full_sequence": sweep and fvg_after_sweep and continued_up,
+                    "max_up_after": max_up,
+                    "max_down_after": max_down,
+                })
+
+            # --- EQUAL HIGHS SEQUENCE ---
+            if abs(highs[i] - highs[j]) / highs[i] < threshold:
+                eq_high_price = highs[j]
+                future = df.iloc[j + 1: j + forward_candles + 1].reset_index(drop=True)
+
+                if future.empty:
+                    continue
+
+                # Step 1 — Did price sweep above equal high?
+                sweep = future["high"].max() > eq_high_price
+                sweep_candle = None
+                if sweep:
+                    for k in range(len(future)):
+                        if future["high"].iloc[k] > eq_high_price:
+                            sweep_candle = k + 1
+                            break
+
+                # Step 2 — After sweep, did a Bearish FVG form?
+                fvg_after_sweep = False
+                if sweep and sweep_candle is not None:
+                    post_sweep = future.iloc[sweep_candle:].reset_index(drop=True)
+                    for k in range(1, len(post_sweep) - 1):
+                        if post_sweep["high"].iloc[k + 1] < post_sweep["low"].iloc[k - 1]:
+                            fvg_after_sweep = True
+                            break
+
+                # Step 3 — Did price continue downward after sequence?
+                continued_down = False
+                if fvg_after_sweep:
+                    post_sweep_low = future.iloc[sweep_candle:]["low"].min() if sweep_candle else 0
+                    continued_down = post_sweep_low < eq_high_price
+
+                max_up = round(future["high"].max() - eq_high_price, 5)
+                max_down = round(eq_high_price - future["low"].min(), 5)
+
+                results.append({
+                    "type": "Equal Highs",
+                    "time": df["time"].iloc[j],
+                    "price": round(eq_high_price, 5),
+                    "sweep_occurred": sweep,
+                    "sweep_candle": sweep_candle,
+                    "fvg_after_sweep": fvg_after_sweep,
+                    "continued_down": continued_up if 'continued_up' in dir() else continued_down,
+                    "full_sequence": sweep and fvg_after_sweep and continued_down,
+                    "max_up_after": max_up,
+                    "max_down_after": max_down,
+                })
+
+    return pd.DataFrame(results)
+
+
+def summarize_eq_ict_sequence(eq_df):
+    if eq_df.empty:
+        return {}
+
+    summary = {}
+
+    for eq_type in ["Equal Lows", "Equal Highs"]:
+        subset = eq_df[eq_df["type"] == eq_type]
+        if subset.empty:
+            continue
+
+        total = len(subset)
+        sweeps = subset["sweep_occurred"].sum()
+        fvg_after = subset["fvg_after_sweep"].sum()
+        full_seq = subset["full_sequence"].sum()
+
+        sweep_rate = round(sweeps / total * 100, 2)
+        fvg_rate = round(fvg_after / sweeps * 100, 2) if sweeps > 0 else 0
+        full_seq_rate = round(full_seq / total * 100, 2)
+
+        avg_up = round(subset["max_up_after"].mean(), 5)
+        avg_down = round(subset["max_down_after"].mean(), 5)
+        max_up = round(subset["max_up_after"].max(), 5)
+        max_down = round(subset["max_down_after"].max(), 5)
+
+        summary[eq_type] = {
+            "total": total,
+            "sweep_count": int(sweeps),
+            "sweep_rate": sweep_rate,
+            "fvg_after_sweep_count": int(fvg_after),
+            "fvg_after_sweep_rate": fvg_rate,
+            "full_sequence_count": int(full_seq),
+            "full_sequence_rate": full_seq_rate,
+            "avg_up_after": avg_up,
+            "avg_down_after": avg_down,
+            "max_up_after": max_up,
+            "max_down_after": max_down,
+        }
+
+    return summary
 
 def run_all_detectors(df, forward_candles=10):
     print("\n--- Running Pattern Detection ---\n")
@@ -462,6 +611,8 @@ def run_all_detectors(df, forward_candles=10):
     })
     fvg_behaviour = analyze_fvg_behaviour(df)
     fvg_summary = summarize_fvg_behaviour(fvg_behaviour)
+    eq_ict = analyze_eq_ict_sequence(df)
+    eq_ict_summary = summarize_eq_ict_sequence(eq_ict)
 
     return {
         "equal_highs_lows": eq,
@@ -473,6 +624,8 @@ def run_all_detectors(df, forward_candles=10):
         "confluence": confluence,
         "fvg_behaviour": fvg_behaviour,
         "fvg_summary": fvg_summary,
+        "eq_ict": eq_ict,
+        "eq_ict_summary": eq_ict_summary,
     }
 
 
